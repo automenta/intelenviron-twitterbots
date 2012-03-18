@@ -16,7 +16,7 @@ import java.util.logging.Logger;
  */
 //    public static double getKeywordDensity(String haystack, String needle) {
 public class Agent {
-    long focusMinutes = 60 * 6;
+    long focusMinutes = 60 * 1;
     
     public final Set<Detail> details = new HashSet();
     final transient Map<String, Double> scores = new HashMap();
@@ -47,7 +47,7 @@ public class Agent {
     }
 
     public double getScore(Classifier classifier, Date when, String k) {
-        if (scores.containsKey(k)) {
+        if ((scores.containsKey(k) && when.equals(lastUpdated))) {
             return scores.get(k);
         }
         double c = 0;
@@ -55,15 +55,33 @@ public class Agent {
         if (details.size() == 0) {
             return 0;
         }
+        
+        final double bg = classifier.getAverageBackgroundDistance(k);
+        
         for (Detail d : details) {
             String p = d.getName();
-            double num = classifier.analyzeC(p, k);
-            if (when!=null) {
-                double ageFactor = getAgeFactor(d.getWhen(), when, focusMinutes);
-                c += num * ageFactor;
-            }
+            
+            double distance = classifier.getDistance(p, k);
+            
+            //METHOD 1: ratio
+            //double num = bg / distance;
+            
+            //METHOD 2: difference
+            double num = (bg - distance)/bg;
+            if (num < 0)
+                num = 0;
+            
+            double ageFactor;
+            if (when!=null)
+                 ageFactor = getAgeFactor(d.getWhen(), when, focusMinutes);
+            else
+                 ageFactor = 1.0;
+            
+            c += num * ageFactor;
         }
-        scores.put(k, c);
+        if (when.equals(lastUpdated)) {
+            scores.put(k, c);
+        }
         return c;
     }
 

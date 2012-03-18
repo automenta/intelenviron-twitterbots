@@ -12,6 +12,7 @@ import automenta.netention.Self;
 import automenta.netention.Session;
 import automenta.netention.feed.TwitterChannel;
 import automenta.netention.impl.MemorySelf;
+import automenta.netention.swing.util.SwingWindow;
 import automenta.netention.value.string.StringIs;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,9 +31,9 @@ public class Community {
 
     private final TwitterChannel tc;
 
-    int refreshAfterCycles = 2000; //the great cycle
-    final long minTweetPeriod = 4 * 60; //in s
-    final long analysisPeriod = (long)(0.35 * 1000.0); //in ms
+    final long minTweetPeriod = 3 * 60; //in s
+    final long analysisPeriod = (long)(0.25 * 1000.0); //in ms
+    int refreshAfterAnalysisCycles = 12000; //the great cycle... only makes sense relative to analysisPeriod... TODO find better way to specify this
     long dontReuseAgentUntil = 60 * 60 * 6; //in seconds
     
     Map<String, Set<String>> queries = new ConcurrentHashMap<>();
@@ -108,20 +109,22 @@ public class Community {
 //        
 //    }
     
-    public String getScoreRatio(Collection<String> agents, int num, long minRepeatAgentTime, final String key1, final String key2) {
+    public String getScoreRatio(Collection<String> agents, int num, long minRepeatAgentTime, final String key, final String keyOpposite) {
         List<String> a = new ArrayList(agents);
         
         Collections.sort(a, new Comparator<String>() {
             @Override public int compare(String a, String b) {   
                 Date bW = getAgent(b).lastUpdated;
                 Date aW = getAgent(a).lastUpdated; 
-                final double bR = getAgent(b).getScore(classifier, bW, key1) / getAgent(b).getScore(classifier, bW, key2);
-                final double aR = getAgent(a).getScore(classifier, aW, key1) / getAgent(a).getScore(classifier, aW, key2);
+                double bk = getAgent(b).getScore(classifier, bW, key);
+                double ak = getAgent(a).getScore(classifier, aW, key);
+                final double bR = bk / getAgent(b).getScore(classifier, bW, keyOpposite);
+                final double aR = ak / getAgent(a).getScore(classifier, aW, keyOpposite);
                 return Double.compare(bR, aR);
             }                
         });
 
-        Date now = new Date();
+        final Date now = new Date();
         String p = "";
         for (String x : a) {
 
@@ -136,8 +139,8 @@ public class Community {
             ag.lastContacted = now;
 
             Date when = ag.lastUpdated;
-            System.out.println(key1 + "/" + key2 + " : SCORE=" + x + " " + 
-                        (getAgent(x).getScore(classifier, when, key1) / getAgent(x).getScore(classifier, when, key2) + " in  " + getAgent(x).details.size())
+            System.out.println(key + " : SCORE=" + x + " " + 
+                        ((getAgent(x).getScore(classifier, when, key)/getAgent(x).getScore(classifier, when, keyOpposite)) + " in  " + getAgent(x).details.size())
                         );
             p += "@" + x.split("/")[1] + " ";
             
@@ -161,7 +164,7 @@ public class Community {
     protected void emit(String message) {
         System.out.println("TWEETING: " + message);
 
-        //tc.updateStatus(message);        
+        tc.updateStatus(message);        
     }
     
     public void runAnalyzeUsers() {
@@ -212,7 +215,7 @@ public class Community {
                 Logger.getLogger(Community.class.getName()).log(Level.SEVERE, null, ex);
             }
             
-            if ((k % refreshAfterCycles) == 0) {
+            if ((k % refreshAfterAnalysisCycles) == 0) {
                 System.out.println("RESTARTING with FRESH DATA");
                 agents.clear();
                 agentsToInvestigate.clear();                
@@ -317,10 +320,8 @@ public class Community {
 
             richPoorAgents = new HashSet();
             
-            queries.put("i bought", richPoorAgents);        
             queries.put("i splurged", richPoorAgents);        
             queries.put("i am poor", richPoorAgents);
-            queries.put("i need money", richPoorAgents);
 
         }
 
@@ -333,9 +334,8 @@ public class Community {
             if (!((happyAuthors.length() == 0) || (sadAuthors.length() == 0))) {            
                 //emit(happyAuthors + " seem #happy. " + oneOf("So please help", "Will you help") +  " " + sadAuthors + " who seem #sad ? " + oneOf("#Kindness", "#Health", "#Wisdom", "#Happiness"));
                 emit(happyAuthors + " may have #wealth to share with " + sadAuthors + " ? " + 
-                        oneOf("#Generosity", "#Charity", "#Kindness", "#Opportunity") + " " +
-                        oneOf("#Fundraising", "#Philanthropy", "#SocialGood", "#Cause", "#GiveBack") + " " +
-                        oneOf("#NewEconomy", "#Poverty", "#HumanRights", "#DoGood")
+                        oneOf("#Generosity", "#Charity", "#Kindness", "#Opportunity", "#NewEconomy", "#Poverty") + " " +
+                        oneOf("#Fundraising", "#Philanthropy", "#SocialGood", "#Cause", "#GiveBack", "#HumanRights", "#DoGood") 
                         ); //http://www.socialbrite.org/2010/09/08/40-hashtags-for-social-good/
             }
 
@@ -373,6 +373,7 @@ public class Community {
         String path = "data";
         
         Classifier cc = Classifier.load(path, false);        
+        System.out.println(cc.corpii);
         
         cc.addCategory("happy");
         cc.addCategory("sad");

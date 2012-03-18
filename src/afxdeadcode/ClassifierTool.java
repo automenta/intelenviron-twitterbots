@@ -10,7 +10,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.util.Arrays;
 import javax.swing.*;
 
 /**
@@ -81,7 +80,7 @@ public class ClassifierTool extends JPanel {
         protected synchronized void update() {
             final String t = input.getText().trim();
             output.setText(                    
-                    "Happy:"  + c.analyzeC(t, "happy") + " Sad: " + c.analyzeC(t, "sad") + "\n");
+                    "Happy:"  + c.getDistance(t, "happy") + " Sad: " + c.getDistance(t, "sad") + "\n");
                     //"Rich/Poor:"  + c.analyzeC(input.getText().trim(), Arrays.asList( new String[] {"rich", "poor" } ) ).toString()
             
             

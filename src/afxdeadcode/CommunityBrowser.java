@@ -6,11 +6,8 @@ package afxdeadcode;
 
 import automenta.netention.Detail;
 import java.awt.BorderLayout;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.LinkedList;
-import java.util.List;
+import java.text.DecimalFormat;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.*;
@@ -35,7 +32,11 @@ public class CommunityBrowser extends JPanel implements ListSelectionListener {
         
         this.community = c;
         
-        tableModel = new DefaultTableModel();
+        tableModel = new DefaultTableModel() {
+            @Override public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
         tableModel.addColumn("ID");
         tableModel.addColumn("Last Updated");
         tableModel.addColumn("Tweets Read");
@@ -61,7 +62,7 @@ public class CommunityBrowser extends JPanel implements ListSelectionListener {
                 while (true) {
                     update();
                     try {
-                        Thread.sleep(15000);
+                        Thread.sleep(3000);
                     } catch (InterruptedException ex) {
                         Logger.getLogger(CommunityBrowser.class.getName()).log(Level.SEVERE, null, ex);
                     }
@@ -79,22 +80,45 @@ public class CommunityBrowser extends JPanel implements ListSelectionListener {
         return -1;
     }
     
+    static String doubleToString(double n) {
+        int x = (int)(n * 10000.0);
+        return intToString(x, 10);
+    }
+    
+    static String intToString(int num, int digits) {
+        assert digits > 0 : "Invalid number of digits";
+
+        // create variable length array of zeros
+        char[] zeros = new char[digits];
+        Arrays.fill(zeros, '0');
+        // format number as String
+        DecimalFormat df = new DecimalFormat(String.valueOf(zeros));
+
+        return df.format(num);
+    }
+    
     protected void update() {
         int selected = table.getSelectedRow();
         updating = true;
-        final Date d = new Date();
+        
+        table.setVisible(false);
         for (Agent a : community.agents.values()) {
+            if (a.details.size() < 2) {
+                continue;
+            }
+            
+            final Date d = a.lastUpdated;
             int existingRow = getRow(a.name);
             if (existingRow!=-1)
                 tableModel.removeRow(existingRow);
             
-            double happy = a.getScore(community.classifier, d, "happy");
-            double sad = a.getScore(community.classifier, d, "sad");
-            double rich = a.getScore(community.classifier, d, "rich");
-            double poor = a.getScore(community.classifier, d, "poor");
+            String happy = doubleToString(a.getScore(community.classifier, d, "happy")/a.getScore(community.classifier, d, "sad"));
+            String rich = doubleToString(a.getScore(community.classifier, d, "rich")/a.getScore(community.classifier, d, "poor"));
             
-            tableModel.addRow(new Object[] { a.name, a.lastContacted, a.details.size(), (happy/sad), (rich/poor) } );
+            
+            tableModel.addRow(new Object[] { a.name, a.lastContacted, a.details.size(), happy, rich } );
         }
+        table.setVisible(true);
         updating = false;
         
         SwingUtilities.invokeLater(new Runnable() {
@@ -108,8 +132,6 @@ public class CommunityBrowser extends JPanel implements ListSelectionListener {
 
     @Override
     public synchronized void valueChanged(ListSelectionEvent e) {
-        if (updating)
-            return;
         
         int selected = table.getSelectedRow();
         

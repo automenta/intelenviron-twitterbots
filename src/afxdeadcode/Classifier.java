@@ -4,6 +4,7 @@
  */
 package afxdeadcode;
 
+import automenta.netention.feed.TwitterChannel;
 import java.io.*;
 import java.util.*;
 import java.util.logging.Level;
@@ -17,7 +18,10 @@ import org.knallgrau.utils.textcat.FingerPrint;
 public class Classifier implements Serializable {
     public Map<String, String> corpii = new HashMap();
     transient public Map<String, Category> cats = new HashMap();
-
+    
+    transient public Map<String, Double> avgBackground = new HashMap();
+    transient public Map<String, List<Integer>> avgBackgroundSamples = new HashMap();
+    
     public static Classifier load(String path, boolean saveOnExit) {
         Classifier cc;
         try {
@@ -27,6 +31,14 @@ public class Classifier implements Serializable {
             ois.close();
         } catch (Exception e) {
             cc = new Classifier();
+        }
+        
+        try {
+            cc.calibrateNormal();
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+            System.exit(1);
         }
         
         if (saveOnExit)
@@ -41,6 +53,43 @@ public class Classifier implements Serializable {
 
     public void update() {
         cats.clear();
+    }
+    
+    public void calibrateNormal() throws Exception {
+        System.out.println("Calibrating normal levels");
+        
+        final int cycles = 4;
+        
+        for (String s : TwitterChannel.getPublicTweetStrings(cycles)) {
+            addBackground(s);
+        }
+        
+        System.out.println("avg background distances: " + avgBackground);
+    }
+    
+    public void addBackground(String p) {
+        
+        if (avgBackgroundSamples == null) {
+            avgBackground = new HashMap();
+            avgBackgroundSamples = new HashMap();
+        }
+        
+        for (String c : corpii.keySet()) {
+            int dist = getDistance(p, c);
+            if (avgBackgroundSamples.get(c) == null)
+                avgBackgroundSamples.put(c, new LinkedList());
+            avgBackgroundSamples.get(c).add(dist);            
+        }
+        
+        //recompute avgBackground
+        for (String c : corpii.keySet()) {
+            double total = 0;
+            for (Integer i : avgBackgroundSamples.get(c)) {
+                total += i;
+            }
+            double n = avgBackgroundSamples.size();
+            avgBackground.put(c, total / n);
+        }
     }
     
     public void addCategory(String x) {
@@ -94,47 +143,56 @@ public class Classifier implements Serializable {
         return corpii.get(p);
     }
     
-    public Map<String, Double> analyzeC(String t, List<String> catCompared) {
-        Map<String, Integer> result = analyze(t, catCompared);
-        
-        Map<String, Double> d = new HashMap();
-        for (String x : result.keySet()) {
-            double nv = result.get(x) == 0 ? 1.0 : ((double)corpii.get(x).length()) / ((double)result.get(x));
-            d.put(x, nv);
-        }
-        
-        return d;
-        
-    }
-    public double analyzeC(String t, String c) {
+//    public Map<String, Double> analyzeC(String t, List<String> catCompared) {
+//        Map<String, Integer> result = analyze(t, catCompared);
+//        
+//        Map<String, Double> d = new HashMap();
+//        for (String x : result.keySet()) {
+//            double nv = result.get(x) == 0 ? 1.0 : ((double)corpii.get(x).length()) / ((double)result.get(x));
+//            d.put(x, nv);
+//        }
+//        
+//        return d;
+//        
+//    }
+    
+    public int getDistance(String t, String c) {
         FingerPrint fp = new FingerPrint();
         fp.create(t);
 
-        int d = fp.categorize(Arrays.asList(new FingerPrint[] { getCategory(c) }) ).get(c);
-        
-        return d == 0 ? 1.0 : ((double)corpii.get(c).length()) / ((double)d); // * ((double)t.length());
+        return fp.categorize(Arrays.asList(new FingerPrint[] { getCategory(c) }) ).get(c);
     }
 
-    @Deprecated public Map<String, Double> analyzeNormalized(String t, List<String> catCompared) {
-        Map<String, Double> result = analyzeC(t, catCompared);
-        double maxDist = 0, minDist = -1;
-        for (Double ii : result.values()) {
-            if (maxDist < ii) maxDist = ii;
-            if (minDist == -1) minDist = ii;
-            else if (minDist > ii) minDist = ii;
-        }
-        
-        Map<String, Double> d = new HashMap();
-        if ((maxDist!=0) && (maxDist!=minDist)) {
-            for (String x : result.keySet()) {
-                double nv = 1.0 - ((double)(result.get(x) - minDist)) / ((double)maxDist - minDist);
-                d.put(x, nv);
-            }
-        }
-        
-        return d;
-        
-    }
+//    public double analyzeC(String t, String c) {
+//        FingerPrint fp = new FingerPrint();
+//        fp.create(t);
+//
+//        int d = fp.categorize(Arrays.asList(new FingerPrint[] { getCategory(c) }) ).get(c);
+//        
+//        return d == 0 ? 1.0 : ((double)corpii.get(c).length()) / ((double)d); // * ((double)t.length());
+//    }
+//
+//    @Deprecated public Map<String, Double> analyzeNormalized(String t, List<String> catCompared) {
+//        Map<String, Double> result = analyzeC(t, catCompared);
+//        double maxDist = 0, minDist = -1;
+//        for (Double ii : result.values()) {
+//            if (maxDist < ii) maxDist = ii;
+//            if (minDist == -1) minDist = ii;
+//            else if (minDist > ii) minDist = ii;
+//        }
+//        
+//        Map<String, Double> d = new HashMap();
+//        if ((maxDist!=0) && (maxDist!=minDist)) {
+//            for (String x : result.keySet()) {
+//                double nv = 1.0 - ((double)(result.get(x) - minDist)) / ((double)maxDist - minDist);
+//                d.put(x, nv);
+//            }
+//        }
+//        
+//        return d;
+//        
+//    }
+    
     public Map<String, Integer> analyze(String t, List<String> catCompared) {
         FingerPrint fp = new FingerPrint();
         fp.create(t);
@@ -145,6 +203,10 @@ public class Classifier implements Serializable {
                 ffp.add(cat);
         
         return fp.categorize(ffp);
+    }
+
+    public double getAverageBackgroundDistance(String k) {
+        return avgBackground.get(k);
     }
 
     
