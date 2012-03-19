@@ -12,12 +12,15 @@ import automenta.netention.Self;
 import automenta.netention.Session;
 import automenta.netention.feed.TwitterChannel;
 import automenta.netention.impl.MemorySelf;
-import automenta.netention.swing.util.SwingWindow;
+
 import automenta.netention.value.string.StringIs;
+import java.awt.Color;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import redstone.xmlrpc.XmlRpcFault;
 
 
 /**
@@ -27,19 +30,21 @@ import java.util.logging.Logger;
 public class Community {
 
     Map<String, Agent> agents = new ConcurrentHashMap();
-    public List<String> agentsToInvestigate = new LinkedList();
-
+    public List<String> agentsToInvestigate = Collections.synchronizedList(new LinkedList());
+            
     private final TwitterChannel tc;
 
     final long minTweetPeriod = 3 * 60; //in s
-    final long analysisPeriod = (long)(0.25 * 1000.0); //in ms
+    final long analysisPeriod = (long)(0.3 * 1000.0); //in ms
     int refreshAfterAnalysisCycles = 12000; //the great cycle... only makes sense relative to analysisPeriod... TODO find better way to specify this
     long dontReuseAgentUntil = 60 * 60 * 6; //in seconds
     
     Map<String, Set<String>> queries = new ConcurrentHashMap<>();
     public final Classifier classifier;
 
-    
+    boolean emitToTwitter = true;
+    boolean includeReportURL = false;
+        
     public static int getKeywordCount(String haystack, String needle) {
         haystack = haystack.toLowerCase();
         needle = needle.toLowerCase();
@@ -54,6 +59,7 @@ public class Community {
             return 0;
         return p.split(" ").length;
     }
+    private final WordpressChannel blog;
     
 
     public Agent getAgent(String user) {
@@ -109,7 +115,7 @@ public class Community {
 //        
 //    }
     
-    public String getScoreRatio(Collection<String> agents, int num, long minRepeatAgentTime, final String key, final String keyOpposite) {
+    public Collection<String> getScoreRatio(Collection<String> agents, int num, long minRepeatAgentTime, final String key, final String keyOpposite) {
         List<String> a = new ArrayList(agents);
         
         Collections.sort(a, new Comparator<String>() {
@@ -125,7 +131,7 @@ public class Community {
         });
 
         final Date now = new Date();
-        String p = "";
+        List<String> p = new LinkedList();
         for (String x : a) {
 
             Agent ag = getAgent(x);
@@ -142,14 +148,14 @@ public class Community {
             System.out.println(key + " : SCORE=" + x + " " + 
                         ((getAgent(x).getScore(classifier, when, key)/getAgent(x).getScore(classifier, when, keyOpposite)) + " in  " + getAgent(x).details.size())
                         );
-            p += "@" + x.split("/")[1] + " ";
+            p.add("@" + x.split("/")[1]);
             
             num--;
             if (num == 0)
                 break;
         }
 
-        return p.trim();
+        return p;
         
     }
 
@@ -162,9 +168,12 @@ public class Community {
     
     
     protected void emit(String message) {
+        message = message.trim();
+        
         System.out.println("TWEETING: " + message);
 
-        tc.updateStatus(message);        
+        if (emitToTwitter)
+            tc.updateStatus(message);        
     }
     
     public void runAnalyzeUsers() {
@@ -224,6 +233,12 @@ public class Community {
         }
     }
 
+    public static String getUserString(Collection<String> c) {
+        String p = "";
+        for (String s : c)
+            p += s + " ";
+        return p.trim();
+    }
     public abstract class Matcher implements Runnable {
         private final long phaseSeconds;
         private final long period;
@@ -255,13 +270,19 @@ public class Community {
         abstract protected void operate();
     }
 
+    public static String getColor(float r, float g, float b) {
+        Color c = new Color(r, g, b);
+        String rgb = Integer.toHexString(c.getRGB());
+        return "#" + rgb.substring(2, rgb.length());        
+    }
+    
     public class HappySad extends Matcher {
-        private final HashSet happySadAgents;
+        private final Set happySadAgents;
 
         public HappySad(long period, long phaseSeconds) {
             super(period, phaseSeconds);
             
-            happySadAgents = new HashSet();
+            happySadAgents = new ConcurrentSkipListSet<String>();
             
             queries.put("i am happy", happySadAgents);
             queries.put("i feel great", happySadAgents);
@@ -272,14 +293,30 @@ public class Community {
         @Override
         protected void operate() {
             
-                        
-            String happyAuthors = getScoreRatio(happySadAgents, 3, dontReuseAgentUntil, "happy", "sad");
-            String sadAuthors = getScoreRatio(happySadAgents, 2, dontReuseAgentUntil, "sad", "happy");
+            Collection<String> happyAuthors = getScoreRatio(happySadAgents, 3, dontReuseAgentUntil, "happy", "sad");
+            Collection<String> sadAuthors = getScoreRatio(happySadAgents, 2, dontReuseAgentUntil, "sad", "happy");
             
-            if (!((happyAuthors.length() == 0) || (sadAuthors.length() == 0))) {            
-                emit(happyAuthors + " seem #happy. " + oneOf("So please help", "Will you help") +  " " + sadAuthors + " who seem #sad ? " + 
+            if (!((happyAuthors.size() == 0) || (sadAuthors.size() == 0))) {  
+                
+                String happyAuthorsStr = getUserString(happyAuthors);
+                String sadAuthorsStr = getUserString(sadAuthors);
+                //emit(happyAuthors + " seem #happy. " + oneOf("So please help", "Will you help") +  " " + sadAuthors + " who seem #sad ? " + oneOf("#Kindness", "#Health", "#Wisdom", "#Happiness"));
+
+                String richReport = emitReport("happy", happyAuthors);
+                String poorReport = emitReport("sad", sadAuthors);
+                String reportURL = "";
+                try {
+                    reportURL = blog.newPost("Happy " + getUserString(happyAuthors) + " vs. Sad " + getUserString(sadAuthors), richReport + "<br/>" + poorReport);
+                } catch (XmlRpcFault ex) {
+                    Logger.getLogger(Community.class.getName()).log(Level.SEVERE, null, ex);
+                }
+                
+                emit(happyAuthorsStr + " seem #happy. " + oneOf("So please help", "Will you help") +  " " + sadAuthorsStr + " who seem #sad ? " + 
                         oneOf("#Kindness", "#Health", "#Wisdom", "#Happiness") + " " +
-                        oneOf("#SocialGood", "#Cause", "#Volunteer", "#4Change", "#GiveBack", "#DoGood", "#Crisiscommons"));
+                        oneOf("#SocialGood", "#Cause", "#Volunteer", "#4Change", "#GiveBack", "#DoGood", "#Crisiscommons") + " " +
+                        (includeReportURL ? reportURL : "")
+                        );
+                
             }
             
         }
@@ -313,39 +350,98 @@ public class Community {
 //    }
     
     public class RichPoor extends Matcher {
-        private final HashSet richPoorAgents;
+        private final Set richPoorAgents;
 
         public RichPoor(long period, long phaseSeconds) {
             super(period, phaseSeconds);
 
-            richPoorAgents = new HashSet();
+            richPoorAgents = new ConcurrentSkipListSet<String>();
             
             queries.put("i splurged", richPoorAgents);        
             queries.put("i am poor", richPoorAgents);
 
         }
+        
 
         @Override
         protected void operate() { 
                         
-            String happyAuthors = getScoreRatio(richPoorAgents, 2, dontReuseAgentUntil, "rich", "poor");
-            String sadAuthors = getScoreRatio(richPoorAgents, 2, dontReuseAgentUntil, "poor", "rich");
+            Collection<String> happyAuthors = getScoreRatio(richPoorAgents, 2, dontReuseAgentUntil, "rich", "poor");
+            Collection<String> sadAuthors = getScoreRatio(richPoorAgents, 2, dontReuseAgentUntil, "poor", "rich");
             
-            if (!((happyAuthors.length() == 0) || (sadAuthors.length() == 0))) {            
+            if (!((happyAuthors.size() == 0) || (sadAuthors.size() == 0))) {  
+                
+                String happyAuthorsStr = getUserString(happyAuthors);
+                String sadAuthorsStr = getUserString(sadAuthors);
                 //emit(happyAuthors + " seem #happy. " + oneOf("So please help", "Will you help") +  " " + sadAuthors + " who seem #sad ? " + oneOf("#Kindness", "#Health", "#Wisdom", "#Happiness"));
-                emit(happyAuthors + " may have #wealth to share with " + sadAuthors + " ? " + 
+
+                String richReport = emitReport("rich", happyAuthors);
+                String poorReport = emitReport("poor", sadAuthors);
+                String reportURL = "";
+                try {
+                    reportURL = blog.newPost("Rich " + getUserString(happyAuthors) + " vs. Poor " + getUserString(sadAuthors), richReport + "<br/>" + poorReport);
+                } catch (XmlRpcFault ex) {
+                    Logger.getLogger(Community.class.getName()).log(Level.SEVERE, null, ex);
+                }
+                
+                emit(happyAuthorsStr + " may have #wealth to share with " + sadAuthorsStr + " ? " + 
                         oneOf("#Generosity", "#Charity", "#Kindness", "#Opportunity", "#NewEconomy", "#Poverty") + " " +
-                        oneOf("#Fundraising", "#Philanthropy", "#SocialGood", "#Cause", "#GiveBack", "#HumanRights", "#DoGood") 
+                        oneOf("#Fundraising", "#Philanthropy", "#SocialGood", "#Cause", "#GiveBack", "#HumanRights", "#DoGood") + " " +
+                        (includeReportURL ? reportURL : "")
                         ); //http://www.socialbrite.org/2010/09/08/40-hashtags-for-social-good/
+
+                
             }
 
         }
+
                
+    }
+    
+    public String emitReport(String key, Collection<String> authors) {
+        StringBuilder s = new StringBuilder();
+        
+        s.append("<center><h1>" + key + "</h1></center>");
+        for (String a : authors) {
+            s.append("<p><h2>" + a + "</h2></p>");
+            Agent ax = getAgent("twitter.com/" + a.substring(1)); //TODO clumsy
+            
+            List<Detail> detailsByTime = ax.getDetailsByTime2();
+            double minScore = -1;
+            double maxScore = -1;
+            for (Detail d : detailsByTime) {
+                float score = (float)ax.getScore(classifier, ax.lastUpdated, key, d);
+                if (minScore == -1) { minScore = score; maxScore = score; }
+                if (minScore > score) minScore = score;
+                if (maxScore < score) maxScore = score;
+            }
+            
+            for (Detail d : detailsByTime) {
+                float score = 1.0f;
+                if (minScore!=maxScore) {
+                    score = (float)ax.getScore(classifier, ax.lastUpdated, key, d);
+                    score = (float)((score - minScore) / (maxScore - minScore));
+                }
+                
+                float age = (float)ax.getAgeFactor(d, ax.focusMinutes);
+                
+                score *= age;
+                
+                float tc = (float)Math.min((1.0f - age), 0.3f);
+                String style = "color: " + getColor(tc, tc, tc) + 
+                                "; background-color: " + getColor(1.0f, (1.0f - score)/2.0f + 0.5f, (1.0f - score)/2.0f + 0.5f) + ";";
+                
+                s.append("<p style='" + style + ";margin-bottom:0;' >" + d.getName() + " (@" + d.getWhen().toString() + ": " + key+ "=" + score + ")</p>");
+            }
+        }
+        
+        return s.toString();
     }
     
     public Community(Classifier c) throws Exception {
         
         this.classifier = c;
+        this.blog = new WordpressChannel();
 
         Self s = new MemorySelf();
         
@@ -357,9 +453,9 @@ public class Community {
                 runAnalyzeUsers();
             }            
         });
-        s.queue(new HappySad(minTweetPeriod, minTweetPeriod * 4 /8));
+        s.queue(new HappySad(minTweetPeriod, minTweetPeriod * 3 /8));
         //s.queue(new SmartStupid(2 * 60, 2 * 60));
-        s.queue(new RichPoor(minTweetPeriod, minTweetPeriod * 6 /8));
+        s.queue(new RichPoor(minTweetPeriod, minTweetPeriod * 7 /8));
         
         //new SwingWindow(new CommunityBrowser(this), 800, 600, true);
         

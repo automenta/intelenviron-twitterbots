@@ -58,7 +58,7 @@ public class Classifier implements Serializable {
     public void calibrateNormal() throws Exception {
         System.out.println("Calibrating normal levels");
         
-        final int cycles = 4;
+        final int cycles = 8;
         
         for (String s : TwitterChannel.getPublicTweetStrings(cycles)) {
             addBackground(s);

@@ -6,7 +6,9 @@ package afxdeadcode;
 
 import automenta.netention.Detail;
 import automenta.netention.feed.TwitterChannel;
+import com.twitter.Extractor;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -16,10 +18,31 @@ import java.util.logging.Logger;
  */
 //    public static double getKeywordDensity(String haystack, String needle) {
 public class Agent {
-    long focusMinutes = 60 * 1;
+    public final static Extractor ext = new Extractor();
     
-    public final Set<Detail> details = new HashSet();
-    final transient Map<String, Double> scores = new HashMap();
+    public static String filterTweet(String p) {
+        List<String> blacklist = new LinkedList();
+        for (String m : ext.extractMentionedScreennames(p)) {
+            blacklist.add("@" + m);
+        }
+       
+        blacklist.addAll(ext.extractURLs(p));
+        if (ext.extractReplyScreenname(p)!=null)
+            blacklist.add("@" + ext.extractReplyScreenname(p));
+        for (String b : blacklist) {
+            p = p.replace(b, "");
+        }        
+        if (p.startsWith("RT ")) {
+            p = p.replaceFirst("RT ", "");
+        }
+        
+        return p.trim();
+    }
+
+    long focusMinutes = 90;
+    
+    public final Set<Detail> details = Collections.synchronizedSet(new HashSet<Detail>());
+    final transient Map<String, Double> scores = new ConcurrentHashMap();
     public final String name;
     public Date lastContacted, lastUpdated = new Date();
 
@@ -45,6 +68,18 @@ public class Agent {
         System.out.println("  Rich=" + getScore(classifier, new Date(), "rich"));
         System.out.println("  Poor=" + getScore(classifier, new Date(), "poor"));
     }
+    
+    
+    double getScore(Classifier classifier, Date lastUpdated, String k, Detail d) {
+            String p = filterTweet(d.getName());            
+            final double bg = classifier.getAverageBackgroundDistance(k);
+            double distance = classifier.getDistance(p, k);        
+            return (bg-distance) / bg;
+    }
+    
+    public double getAgeFactor(Detail d, double focusMinutes) {
+        return getAgeFactor(d.getWhen(), lastUpdated, focusMinutes);
+    }
 
     public double getScore(Classifier classifier, Date when, String k) {
         if ((scores.containsKey(k) && when.equals(lastUpdated))) {
@@ -59,7 +94,7 @@ public class Agent {
         final double bg = classifier.getAverageBackgroundDistance(k);
         
         for (Detail d : details) {
-            String p = d.getName();
+            String p = filterTweet(d.getName());
             
             double distance = classifier.getDistance(p, k);
             
@@ -133,6 +168,36 @@ public class Agent {
             Logger.getLogger(Community.class.getName()).log(Level.SEVERE, null, ex);
         }
         scores.clear();
+    }
+
+    public List<Detail> getDetailsByTime2() {
+        
+        List<Detail> s = new LinkedList(details);
+        Collections.sort(s, new Comparator<Detail>() {
+            @Override public int compare(Detail o1, Detail o2) {
+                return o2.getWhen().compareTo(o1.getWhen());
+            }            
+        });
+        
+        return s;
+        
+    }
+    public List<Detail> getDetailsByTime() {
+        
+        List<Detail> s = new LinkedList(details);
+        Collections.sort(s, new Comparator<Detail>() {
+            @Override public int compare(Detail o1, Detail o2) {
+                return o2.getWhen().compareTo(o1.getWhen());
+            }            
+        });
+        
+        return s;
+        
+    }
+
+    public static void main(String[] args) {
+
+     
     }
     
 }
