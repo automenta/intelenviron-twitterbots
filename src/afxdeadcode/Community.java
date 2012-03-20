@@ -271,6 +271,10 @@ public class Community {
     }
 
     public static String getColor(float r, float g, float b) {
+        r = Math.max(0, Math.min(r, 1.0f));
+        g = Math.max(0, Math.min(g, 1.0f));
+        b = Math.max(0, Math.min(b, 1.0f));
+        
         Color c = new Color(r, g, b);
         String rgb = Integer.toHexString(c.getRGB());
         return "#" + rgb.substring(2, rgb.length());        
@@ -313,7 +317,7 @@ public class Community {
                 
                 emit(happyAuthorsStr + " seem #happy. " + oneOf("So please help", "Will you help") +  " " + sadAuthorsStr + " who seem #sad ? " + 
                         oneOf("#Kindness", "#Health", "#Wisdom", "#Happiness") + " " +
-                        oneOf("#SocialGood", "#Cause", "#Volunteer", "#4Change", "#GiveBack", "#DoGood", "#Crisiscommons") + " " +
+                        oneOf("#SocialGood", "#Cause", "#Volunteer", "#4Change", "#GiveBack", "#DoGood") + " " +
                         (includeReportURL ? reportURL : "")
                         );
                 

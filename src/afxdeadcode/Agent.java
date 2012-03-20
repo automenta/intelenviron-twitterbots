@@ -39,7 +39,7 @@ public class Agent {
         return p.trim();
     }
 
-    long focusMinutes = 90;
+    long focusMinutes = 6 * 60;
     
     public final Set<Detail> details = Collections.synchronizedSet(new HashSet<Detail>());
     final transient Map<String, Double> scores = new ConcurrentHashMap();

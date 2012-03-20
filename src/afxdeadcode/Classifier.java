@@ -20,7 +20,7 @@ public class Classifier implements Serializable {
     transient public Map<String, Category> cats = new HashMap();
     
     transient public Map<String, Double> avgBackground = new HashMap();
-    transient public Map<String, List<Integer>> avgBackgroundSamples = new HashMap();
+    transient public Map<String, List<Double>> avgBackgroundSamples = new HashMap();
     
     public static Classifier load(String path, boolean saveOnExit) {
         Classifier cc;
@@ -58,9 +58,10 @@ public class Classifier implements Serializable {
     public void calibrateNormal() throws Exception {
         System.out.println("Calibrating normal levels");
         
-        final int cycles = 8;
+        final int cycles = 4;
         
         for (String s : TwitterChannel.getPublicTweetStrings(cycles)) {
+            //addBackground(Agent.filterTweet(s));
             addBackground(s);
         }
         
@@ -68,14 +69,18 @@ public class Classifier implements Serializable {
     }
     
     public void addBackground(String p) {
-        
+                
         if (avgBackgroundSamples == null) {
             avgBackground = new HashMap();
             avgBackgroundSamples = new HashMap();
         }
         
         for (String c : corpii.keySet()) {
-            int dist = getDistance(p, c);
+            double dist = getDistance(p, c);
+            
+//            if (c.equals("happy"))
+                //System.out.println(c + " " + p + " " + dist + " " + p.length() + " " + ( ((double)dist) / ((double)p.length()) ));
+
             if (avgBackgroundSamples.get(c) == null)
                 avgBackgroundSamples.put(c, new LinkedList());
             avgBackgroundSamples.get(c).add(dist);            
@@ -84,11 +89,12 @@ public class Classifier implements Serializable {
         //recompute avgBackground
         for (String c : corpii.keySet()) {
             double total = 0;
-            for (Integer i : avgBackgroundSamples.get(c)) {
+            for (Double i : avgBackgroundSamples.get(c)) {
                 total += i;
             }
             double n = avgBackgroundSamples.size();
-            avgBackground.put(c, total / n);
+            double v = total/n;
+            avgBackground.put(c, v);
         }
     }
     
@@ -156,11 +162,11 @@ public class Classifier implements Serializable {
 //        
 //    }
     
-    public int getDistance(String t, String c) {
+    public double getDistance(String t, String c) {
         FingerPrint fp = new FingerPrint();
         fp.create(t);
 
-        return fp.categorize(Arrays.asList(new FingerPrint[] { getCategory(c) }) ).get(c);
+        return ((double)fp.categorize(Arrays.asList(new FingerPrint[] { getCategory(c) }) ).get(c)) / ((double)t.length());
     }
 
 //    public double analyzeC(String t, String c) {
