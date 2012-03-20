@@ -164,7 +164,7 @@ public class Agent {
             lastUpdated = new Date();
             //                for (Detail d : tw)
             //                    addMentions(d);
-        } catch (Exception ex) {
+        }catch (Exception ex) {
             Logger.getLogger(Community.class.getName()).log(Level.SEVERE, null, ex);
         }
         scores.clear();

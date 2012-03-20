@@ -10,6 +10,7 @@ import automenta.netention.Detail;
 import automenta.netention.NMessage;
 import automenta.netention.Self;
 import automenta.netention.Session;
+import automenta.netention.email.EMailChannel;
 import automenta.netention.feed.TwitterChannel;
 import automenta.netention.impl.MemorySelf;
 
@@ -34,16 +35,20 @@ public class Community {
             
     private final TwitterChannel tc;
 
-    final long minTweetPeriod = 3 * 60; //in s
-    final long analysisPeriod = (long)(0.3 * 1000.0); //in ms
-    int refreshAfterAnalysisCycles = 12000; //the great cycle... only makes sense relative to analysisPeriod... TODO find better way to specify this
+    final long minTweetPeriod = 6 * 60; //in s
+    final long analysisPeriod = (long)(0.35 * 1000.0); //in ms
+    int refreshAfterAnalysisCycles = 8 * 12000; //the great cycle... only makes sense relative to analysisPeriod... TODO find better way to specify this
     long dontReuseAgentUntil = 60 * 60 * 6; //in seconds
     
     Map<String, Set<String>> queries = new ConcurrentHashMap<>();
     public final Classifier classifier;
 
+    boolean sendToWordpress = false;
+    boolean sendToBlogger = true;
     boolean emitToTwitter = true;
+
     boolean includeReportURL = false;
+    
         
     public static int getKeywordCount(String haystack, String needle) {
         haystack = haystack.toLowerCase();
@@ -115,7 +120,7 @@ public class Community {
 //        
 //    }
     
-    public Collection<String> getScoreRatio(Collection<String> agents, int num, long minRepeatAgentTime, final String key, final String keyOpposite) {
+    public Collection<String> getMost(Collection<String> agents, int num, long minRepeatAgentTime, final String key, final String keyOpposite) {
         List<String> a = new ArrayList(agents);
         
         Collections.sort(a, new Comparator<String>() {
@@ -141,6 +146,8 @@ public class Community {
                     continue;
                 }
             }
+            if (ag.details.size() == 0)
+                continue;
             
             ag.lastContacted = now;
 
@@ -280,6 +287,8 @@ public class Community {
         return "#" + rgb.substring(2, rgb.length());        
     }
     
+    public final EMailChannel email = new EMailChannel();
+    
     public class HappySad extends Matcher {
         private final Set happySadAgents;
 
@@ -297,8 +306,8 @@ public class Community {
         @Override
         protected void operate() {
             
-            Collection<String> happyAuthors = getScoreRatio(happySadAgents, 3, dontReuseAgentUntil, "happy", "sad");
-            Collection<String> sadAuthors = getScoreRatio(happySadAgents, 2, dontReuseAgentUntil, "sad", "happy");
+            Collection<String> happyAuthors = getMost(happySadAgents, 3, dontReuseAgentUntil, "happy", "sad");
+            Collection<String> sadAuthors = getMost(happySadAgents, 2, dontReuseAgentUntil, "sad", "happy");
             
             if (!((happyAuthors.size() == 0) || (sadAuthors.size() == 0))) {  
                 
@@ -306,25 +315,47 @@ public class Community {
                 String sadAuthorsStr = getUserString(sadAuthors);
                 //emit(happyAuthors + " seem #happy. " + oneOf("So please help", "Will you help") +  " " + sadAuthors + " who seem #sad ? " + oneOf("#Kindness", "#Health", "#Wisdom", "#Happiness"));
 
-                String richReport = emitReport("happy", happyAuthors);
-                String poorReport = emitReport("sad", sadAuthors);
-                String reportURL = "";
-                try {
-                    reportURL = blog.newPost("Happy " + getUserString(happyAuthors) + " vs. Sad " + getUserString(sadAuthors), richReport + "<br/>" + poorReport);
-                } catch (XmlRpcFault ex) {
-                    Logger.getLogger(Community.class.getName()).log(Level.SEVERE, null, ex);
-                }
+                String richReport = getReport("happy", happyAuthors);
+                String poorReport = getReport("sad", sadAuthors);
                 
+                final String Title = "Happy " + getUserString(happyAuthors) + " vs. Sad " + getUserString(sadAuthors);
+                final String Content = richReport + "<br/>" + poorReport;
+
+                emitReport(Title, Content);                
+                
+                //TWEET
                 emit(happyAuthorsStr + " seem #happy. " + oneOf("So please help", "Will you help") +  " " + sadAuthorsStr + " who seem #sad ? " + 
                         oneOf("#Kindness", "#Health", "#Wisdom", "#Happiness") + " " +
-                        oneOf("#SocialGood", "#Cause", "#Volunteer", "#4Change", "#GiveBack", "#DoGood") + " " +
-                        (includeReportURL ? reportURL : "")
+                        oneOf("#SocialGood", "#Cause", "#Volunteer", "#4Change", "#GiveBack", "#DoGood") + " "
+                        //(includeReportURL ? reportURL : "")
                         );
                 
             }
             
         }
                
+    }
+    
+    protected void emitReport(String Title, String Content) {
+        //Blogger
+        if (sendToBlogger) {
+            try {
+                email.sendMessage(new NMessage(Title, email.getFrom(), Session.get("blogger.postemail"), new Date(), Content));
+            } catch (Exception ex) {
+                Logger.getLogger(Community.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+
+        if (sendToWordpress) {
+            //Wordpress
+            String reportURL = "";
+            try {
+                reportURL = blog.newPost(Title, Content);
+            } catch (XmlRpcFault ex) {
+                Logger.getLogger(Community.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+
     }
 //    public class SmartStupid extends Matcher {
 //
@@ -370,8 +401,8 @@ public class Community {
         @Override
         protected void operate() { 
                         
-            Collection<String> happyAuthors = getScoreRatio(richPoorAgents, 2, dontReuseAgentUntil, "rich", "poor");
-            Collection<String> sadAuthors = getScoreRatio(richPoorAgents, 2, dontReuseAgentUntil, "poor", "rich");
+            Collection<String> happyAuthors = getMost(richPoorAgents, 2, dontReuseAgentUntil, "rich", "poor");
+            Collection<String> sadAuthors = getMost(richPoorAgents, 2, dontReuseAgentUntil, "poor", "rich");
             
             if (!((happyAuthors.size() == 0) || (sadAuthors.size() == 0))) {  
                 
@@ -379,19 +410,18 @@ public class Community {
                 String sadAuthorsStr = getUserString(sadAuthors);
                 //emit(happyAuthors + " seem #happy. " + oneOf("So please help", "Will you help") +  " " + sadAuthors + " who seem #sad ? " + oneOf("#Kindness", "#Health", "#Wisdom", "#Happiness"));
 
-                String richReport = emitReport("rich", happyAuthors);
-                String poorReport = emitReport("poor", sadAuthors);
-                String reportURL = "";
-                try {
-                    reportURL = blog.newPost("Rich " + getUserString(happyAuthors) + " vs. Poor " + getUserString(sadAuthors), richReport + "<br/>" + poorReport);
-                } catch (XmlRpcFault ex) {
-                    Logger.getLogger(Community.class.getName()).log(Level.SEVERE, null, ex);
-                }
+                String richReport = getReport("rich", happyAuthors);
+                String poorReport = getReport("poor", sadAuthors);
+
+                final String Title = "Rich " + getUserString(happyAuthors) + " vs. Poor " + getUserString(sadAuthors);
+                final String Content = richReport + "<br/>" + poorReport;
+                emitReport(Title, Content);                
+
                 
                 emit(happyAuthorsStr + " may have #wealth to share with " + sadAuthorsStr + " ? " + 
                         oneOf("#Generosity", "#Charity", "#Kindness", "#Opportunity", "#NewEconomy", "#Poverty") + " " +
-                        oneOf("#Fundraising", "#Philanthropy", "#SocialGood", "#Cause", "#GiveBack", "#HumanRights", "#DoGood") + " " +
-                        (includeReportURL ? reportURL : "")
+                        oneOf("#Fundraising", "#Philanthropy", "#SocialGood", "#Cause", "#GiveBack", "#HumanRights", "#DoGood") + " "
+                        //(includeReportURL ? reportURL : "")
                         ); //http://www.socialbrite.org/2010/09/08/40-hashtags-for-social-good/
 
                 
@@ -402,40 +432,42 @@ public class Community {
                
     }
     
-    public String emitReport(String key, Collection<String> authors) {
+    public String getReport(String key, Collection<String> authors) {
         StringBuilder s = new StringBuilder();
         
         s.append("<center><h1>" + key + "</h1></center>");
         for (String a : authors) {
-            s.append("<p><h2>" + a + "</h2></p>");
+            s.append("<p><h1>" + a + " " + key + "?</h1></p>");
             Agent ax = getAgent("twitter.com/" + a.substring(1)); //TODO clumsy
             
             List<Detail> detailsByTime = ax.getDetailsByTime2();
             double minScore = -1;
             double maxScore = -1;
+            
+
             for (Detail d : detailsByTime) {
-                float score = (float)ax.getScore(classifier, ax.lastUpdated, key, d);
+                float age = (float)ax.getAgeFactor(d, ax.focusMinutes);
+                float score = (float)ax.getScore(classifier, ax.lastUpdated, key, d) * age;
                 if (minScore == -1) { minScore = score; maxScore = score; }
                 if (minScore > score) minScore = score;
                 if (maxScore < score) maxScore = score;
             }
             
             for (Detail d : detailsByTime) {
-                float score = 1.0f;
+                float score = 0.5f;
+                float age = (float)ax.getAgeFactor(d, ax.focusMinutes);
                 if (minScore!=maxScore) {
-                    score = (float)ax.getScore(classifier, ax.lastUpdated, key, d);
+                    score = (float)ax.getScore(classifier, ax.lastUpdated, key, d) * age; //TODO repeats with above, use function
                     score = (float)((score - minScore) / (maxScore - minScore));
                 }
                 
-                float age = (float)ax.getAgeFactor(d, ax.focusMinutes);
-                
-                score *= age;
-                
+                                
                 float tc = (float)Math.min((1.0f - age), 0.3f);
                 String style = "color: " + getColor(tc, tc, tc) + 
-                                "; background-color: " + getColor(1.0f, (1.0f - score)/2.0f + 0.5f, (1.0f - score)/2.0f + 0.5f) + ";";
+                                ";background-color: " + getColor(1.0f, (1.0f - score)/2.0f + 0.5f, (1.0f - score)/2.0f + 0.5f) + 
+                                ";font-size:"+ (int)((1.0 + (score/2.0))*100.0) +"%;";
                 
-                s.append("<p style='" + style + ";margin-bottom:0;' >" + d.getName() + " (@" + d.getWhen().toString() + ": " + key+ "=" + score + ")</p>");
+                s.append("<div style='" + style + ";margin-bottom:0;' >" + d.getName() + " (@" + d.getWhen().toString() + ": " + key+ "=" + score + ")</div>");
             }
         }
         
