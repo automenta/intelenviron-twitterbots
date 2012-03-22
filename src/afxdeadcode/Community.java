@@ -36,15 +36,17 @@ public class Community {
     private final TwitterChannel tc;
 
     final long minTweetPeriod = 6 * 60; //in s
-    final long analysisPeriod = (long)(0.35 * 1000.0); //in ms
+    final long analysisPeriod = (long)(0.8 * 1000.0); //in ms
     int refreshAfterAnalysisCycles = 8 * 12000; //the great cycle... only makes sense relative to analysisPeriod... TODO find better way to specify this
     long dontReuseAgentUntil = 60 * 60 * 6; //in seconds
+    long dontReinvestigate = 1 * 60 * 60; //in seconds
+    long waitForNextQueries = 2 * 60; //in seconds
     
     Map<String, Set<String>> queries = new ConcurrentHashMap<>();
     public final Classifier classifier;
 
-    boolean sendToWordpress = false;
-    boolean sendToBlogger = true;
+    boolean sendToWordpress = true;
+    boolean sendToBlogger = false;
     boolean emitToTwitter = true;
 
     boolean includeReportURL = false;
@@ -123,14 +125,26 @@ public class Community {
     public Collection<String> getMost(Collection<String> agents, int num, long minRepeatAgentTime, final String key, final String keyOpposite) {
         List<String> a = new ArrayList(agents);
         
+        final Map<String, Double> scores = new HashMap();
+        for (String s : a) {
+            Agent ss = getAgent(s);
+            Date aW = ss.lastUpdated; 
+            double ak = ss.getScore(classifier, aW, key);
+            if (ak!=0.0)
+                scores.put(s, ak);
+        }
         Collections.sort(a, new Comparator<String>() {
             @Override public int compare(String a, String b) {   
-                Date bW = getAgent(b).lastUpdated;
-                Date aW = getAgent(a).lastUpdated; 
-                double bk = getAgent(b).getScore(classifier, bW, key);
-                double ak = getAgent(a).getScore(classifier, aW, key);
-                final double bR = bk / getAgent(b).getScore(classifier, bW, keyOpposite);
-                final double aR = ak / getAgent(a).getScore(classifier, aW, keyOpposite);
+//                Date bW = getAgent(b).lastUpdated;
+//                Date aW = getAgent(a).lastUpdated; 
+//                double bk = getAgent(b).getScore(classifier, bW, key);
+//                double ak = getAgent(a).getScore(classifier, aW, key);
+//                final double bR = bk / getAgent(b).getScore(classifier, bW, keyOpposite);
+//                final double aR = ak / getAgent(a).getScore(classifier, aW, keyOpposite);
+                double A = scores.get(a);
+                double B = scores.get(b);
+                final double bR = B / A;
+                final double aR = A / B;
                 return Double.compare(bR, aR);
             }                
         });
@@ -186,6 +200,7 @@ public class Community {
     public void runAnalyzeUsers() {
         int k = 1;                     
         
+        Date now = new Date();
         while (true) {
 
             if (agentsToInvestigate.size()  == 0) {
@@ -197,9 +212,16 @@ public class Community {
                         for (Detail d : tw) {
                             String a = d.getValue(StringIs.class, NMessage.from).getValue();
                             //addMentions(d);
+                            boolean existing = agents.containsKey(a);
                             getAgent(a).add(d);
                             al.add(a);
-                            agentsToInvestigate.add(a);
+                            if (existing) {
+                                if (getAgent(a).lastUpdated.getTime() - now.getTime() > dontReinvestigate * 1000)
+                                    agentsToInvestigate.add(a);
+                            }
+                            else {
+                                agentsToInvestigate.add(a);                                
+                            }
                         }
 
 
@@ -219,10 +241,18 @@ public class Community {
                 }); 
                 
                 final String s = agentsToInvestigate.get(0);
-                //System.out.println("Investigating: " + s);
+                System.out.println("Investigating: " + s);
                 getAgent(s).update(tc);
                 //getAgent(s).print(classifier);
                 agentsToInvestigate.remove(s);
+            }
+            else {
+                System.out.println("No more agents to investigate... pausing before querying again");
+                try {
+                    Thread.sleep(waitForNextQueries*1000);
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(Community.class.getName()).log(Level.SEVERE, null, ex);
+                }
             }
             
             try {
@@ -393,7 +423,11 @@ public class Community {
             richPoorAgents = new ConcurrentSkipListSet<String>();
             
             queries.put("i splurged", richPoorAgents);        
+            queries.put("i spent dollars", richPoorAgents);        
+            queries.put("\"i got paid\"", richPoorAgents);        
             queries.put("i am poor", richPoorAgents);
+            queries.put("i am broke", richPoorAgents);
+            queries.put("i need money", richPoorAgents);
 
         }
         
@@ -465,9 +499,9 @@ public class Community {
                 float tc = (float)Math.min((1.0f - age), 0.3f);
                 String style = "color: " + getColor(tc, tc, tc) + 
                                 ";background-color: " + getColor(1.0f, (1.0f - score)/2.0f + 0.5f, (1.0f - score)/2.0f + 0.5f) + 
-                                ";font-size:"+ (int)((1.0 + (score/2.0))*100.0) +"%;";
+                                ";font-size:"+ Math.max(100, (int)((1.0 + (score/2.0))*100.0)) +"%;";
                 
-                s.append("<div style='" + style + ";margin-bottom:0;' >" + d.getName() + " (@" + d.getWhen().toString() + ": " + key+ "=" + score + ")</div>");
+                s.append("<div style='" + style + ";margin-bottom:0;' >" + d.getName() + " <i>(@" + d.getWhen().toString() + ")</i></div>");
             }
         }
         
