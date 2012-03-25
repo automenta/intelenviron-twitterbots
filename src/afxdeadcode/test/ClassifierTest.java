@@ -2,7 +2,7 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-package afxdeadcode;
+package afxdeadcode.test;
 
 import java.util.Arrays;
 import org.knallgrau.utils.textcat.FingerPrint;

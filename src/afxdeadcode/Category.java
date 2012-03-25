@@ -11,7 +11,7 @@ import org.knallgrau.utils.textcat.FingerPrint;
  * @author SeH
  */
 public class Category extends FingerPrint {
-    private String name;
+    private final String name;
 
     public Category(String name) {
         super();
@@ -23,8 +23,8 @@ public class Category extends FingerPrint {
         return name;
     }
 
-    void setName(String name) {
-        this.name = name;
-    }
-    
+//    void setName(String name) {
+//        this.name = name;
+//    }
+//    
 }

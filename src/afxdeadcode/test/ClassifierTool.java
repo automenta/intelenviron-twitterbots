@@ -2,8 +2,9 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-package afxdeadcode;
+package afxdeadcode.test;
 
+import afxdeadcode.NGramClassifier;
 import automenta.netention.swing.util.SwingWindow;
 import java.awt.BorderLayout;
 import java.awt.event.ActionEvent;

@@ -4,6 +4,7 @@
  */
 package afxdeadcode;
 
+import afxdeadcode.test.ClassifierTool;
 import java.io.*;
 import java.util.*;
 import java.util.logging.Level;
