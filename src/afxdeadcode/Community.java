@@ -35,8 +35,8 @@ public class Community {
             
     private final TwitterChannel tc;
 
-    final long minTweetPeriod = 2 * 60; //in s, safe @ 6
-    final long analysisPeriod = (long)(0.5 * 1000.0); //in ms
+    final long minTweetPeriod = 6 * 60; //in s, safe @ 6
+    final long analysisPeriod = (long)(1.0 * 1000.0); //in ms
     int refreshAfterAnalysisCycles = 8 * 12000; //the great cycle... only makes sense relative to analysisPeriod... TODO find better way to specify this
     long dontReuseAgentUntil = 60 * 60 * 6; //in seconds
     long dontReinvestigate = 1 * 60 * 60; //in seconds
@@ -46,7 +46,7 @@ public class Community {
 
     boolean sendToBlogger = false;  //limits to 50 emails before captcha required
     boolean sendToWordpress = true;
-    boolean emitToTwitter = false;
+    boolean emitToTwitter = true;
 
     boolean includeReportURL = false;
     
