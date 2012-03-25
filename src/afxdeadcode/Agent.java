@@ -18,6 +18,7 @@ import java.util.logging.Logger;
  */
 //    public static double getKeywordDensity(String haystack, String needle) {
 public class Agent {
+
     public final static Extractor ext = new Extractor();
     
     public static String filterTweet(String p) {
@@ -38,8 +39,6 @@ public class Agent {
         
         return p.trim();
     }
-
-    long focusMinutes = 4 * 60;
     
     public final Set<Detail> details = Collections.synchronizedSet(new HashSet<Detail>());
     final transient Map<String, Double> scores = new ConcurrentHashMap();
@@ -61,29 +60,30 @@ public class Agent {
         return Math.exp(-(distMinutes / minutesFalloff));
     }
 
-    public void print(Classifier classifier) {
-        System.out.println(name);
-        System.out.println("  Happy=" + getScore(classifier, new Date(), "happy"));
-        System.out.println("  Sad=" + getScore(classifier, new Date(), "sad"));
-        System.out.println("  Rich=" + getScore(classifier, new Date(), "rich"));
-        System.out.println("  Poor=" + getScore(classifier, new Date(), "poor"));
-    }
+//    public void print(Classifier classifier) {
+//        System.out.println(name);
+//        System.out.println("  Happy=" + getScore(classifier, new Date(), "happy"));
+//        System.out.println("  Sad=" + getScore(classifier, new Date(), "sad"));
+//        System.out.println("  Rich=" + getScore(classifier, new Date(), "rich"));
+//        System.out.println("  Poor=" + getScore(classifier, new Date(), "poor"));
+//    }
+//    
     
-    
-    double getScore(Classifier classifier, Date lastUpdated, String k, Detail d) {
+    public double getScore(NGramClassifier classifier, Date lastUpdated, Detail d) {
             String p = filterTweet(d.getName());            
-            final double bg = classifier.getAverageBackgroundDistance(k);
-            double distance = classifier.getDistance(p, k);        
-            return (bg-distance) / bg;
+            //final double bg = classifier.getAverageBackgroundDistance(k);
+            double distance = classifier.getDistance(p);        
+            //return (bg-distance) / bg;
+            return distance;
     }
     
     public double getAgeFactor(Detail d, double focusMinutes) {
         return getAgeFactor(d.getWhen(), lastUpdated, focusMinutes);
     }
 
-    public double getScore(Classifier classifier, Date when, String k) {
-        if ((scores.containsKey(k) && when.equals(lastUpdated))) {
-            return scores.get(k);
+    public double getScore(NGramClassifier classifier, Date when, double focusMinutes) {
+        if ((scores.containsKey(classifier.getName()) && when.equals(lastUpdated))) {
+            return scores.get(classifier.getName());
         }
         double c = 0;
         double n = 0;
@@ -91,20 +91,23 @@ public class Agent {
             return 0;
         }
         
-        final double bg = classifier.getAverageBackgroundDistance(k);
+        //final double bg = classifier.getAverageBackgroundDistance(k);
         
         for (Detail d : details) {
             String p = filterTweet(d.getName());
             
-            double distance = classifier.getDistance(p, k);
+            double distance = classifier.getDistance(p);
             
             //METHOD 1: ratio
             //double num = bg / distance;
             
             //METHOD 2: difference
-            double num = (bg - distance)/bg;
-            if (num < 0)
-                num = 0;
+//            double num = (bg - distance)/bg;
+//            if (num < 0)
+//                num = 0;
+            
+            //METHOD 3: no bg involved
+            double num = distance;
             
             double ageFactor;
             if (when!=null)
@@ -115,7 +118,7 @@ public class Agent {
             c += num * ageFactor;
         }
         if (when.equals(lastUpdated)) {
-            scores.put(k, c);
+            scores.put(classifier.getName(), c);
         }
         return c;
     }
