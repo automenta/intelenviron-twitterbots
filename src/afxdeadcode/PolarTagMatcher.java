@@ -4,7 +4,8 @@
  */
 package afxdeadcode;
 
-import automenta.netention.Detail;
+
+import afxdeadcode.netention.Detail;
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.logging.Level;
@@ -17,14 +18,14 @@ import java.util.logging.Logger;
 public abstract class PolarTagMatcher implements Runnable {
     private final long phaseSeconds;
     private final long period;
-    long focusMinutes = 3 * 60;
+    long focusMinutes = 8 * 60;
     NGramClassifier a;
     NGramClassifier b;
     private final ConcurrentSkipListSet<String> localAgents;
     private final String catA;
     private final String catB;
-    protected int numAAgents = 2;
-    protected int numBAgents = 2;
+    protected int numAAgents = 1;
+    protected int numBAgents = 1;
     private final Community community;
     long dontReuseAgentUntil = 60 * 60 * 6; //in seconds
 
@@ -76,10 +77,13 @@ public abstract class PolarTagMatcher implements Runnable {
             String richReport = getReport(sa, a);
             String poorReport = getReport(sb, b);
             final String Title = getTitle(sa, sb);
-            final String Content = richReport + "<br/>" + poorReport;
+            
+            String tweet = getTweet(happyAuthorsStr, sadAuthorsStr);
+            final String Content = "<b>" + tweet + "</b><br/>" + richReport + "<br/>" + poorReport;
+            
             community.emitReport(Title, Content);
             //TWEET
-            community.emitTweet(getTweet(happyAuthorsStr, sadAuthorsStr));
+            community.emitTweet(tweet);
         }
     }
 

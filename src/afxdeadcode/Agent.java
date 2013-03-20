@@ -4,8 +4,9 @@
  */
 package afxdeadcode;
 
-import automenta.netention.Detail;
-import automenta.netention.feed.TwitterChannel;
+import afxdeadcode.netention.Detail;
+import afxdeadcode.netention.feed.TwitterChannel;
+
 import com.twitter.Extractor;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;

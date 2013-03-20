@@ -15,7 +15,6 @@ public class HappySad extends PolarTagMatcher {
 
     public HappySad(Community c, long period, long phaseSeconds) {
         super(c, "happy", "sad", period, phaseSeconds);
-        this.numAAgents = 3; //TODO this is a hack
     }
 
     @Override

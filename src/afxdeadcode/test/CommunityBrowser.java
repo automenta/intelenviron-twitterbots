@@ -4,17 +4,6 @@
  */
 package afxdeadcode.test;
 
-import automenta.netention.Detail;
-import java.awt.BorderLayout;
-import java.text.DecimalFormat;
-import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.swing.*;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
-import javax.swing.table.DefaultTableModel;
-
 /**
  *
  * @author SeH

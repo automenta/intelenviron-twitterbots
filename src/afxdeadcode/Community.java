@@ -8,19 +8,15 @@ package afxdeadcode;
 
 import afxdeadcode.bots.RichPoor;
 import afxdeadcode.bots.HappySad;
-import automenta.netention.Detail;
-import automenta.netention.NMessage;
-import automenta.netention.Self;
-import automenta.netention.Session;
-import automenta.netention.email.EMailChannel;
-import automenta.netention.feed.TwitterChannel;
-import automenta.netention.impl.MemorySelf;
+import afxdeadcode.netention.Detail;
+import afxdeadcode.netention.Session;
+import afxdeadcode.netention.feed.TwitterChannel;
 
-import automenta.netention.value.string.StringIs;
+
+
 import java.awt.Color;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import redstone.xmlrpc.XmlRpcFault;
@@ -30,7 +26,7 @@ import redstone.xmlrpc.XmlRpcFault;
  *
  * @author SeH
  */
-public class Community extends MemorySelf {
+public class Community  {
 
     Map<String, Agent> agents = new ConcurrentHashMap();
     public List<String> agentsToInvestigate = Collections.synchronizedList(new LinkedList());
@@ -39,14 +35,14 @@ public class Community extends MemorySelf {
 
     private final TwitterChannel tc;
     private final WordpressChannel blog;    
-    public final EMailChannel email;
+    
 
     public static long ms(int h, int m, int s, int ms) {
         return ms + s * 1000 + m * (1000*60) + h * (1000*60*60);
     }
     
-    long minTweetPeriod = 6 * 60; //in s, safe @ 6
-    long analysisPeriod = ms(0,0,1,0);  //in ms
+    static long minTweetPeriod = 16 * 60; //in s, safe @ 6
+    long analysisPeriod = ms(0,0,3,0);  //in ms
     long dontReinvestigate = 1 * 60 * 60; //in seconds
     long waitForNextQueries = 2 * 60; //in seconds
     int refreshAfterAnalysisCycles = 8 * 12000; //the great cycle... only makes sense relative to analysisPeriod... TODO find better way to specify this
@@ -148,13 +144,13 @@ public class Community extends MemorySelf {
     
     protected void emitReport(String Title, String Content) {
         //Blogger
-        if (sendToBlogger) {
+        /*if (sendToBlogger) {
             try {
                 email.sendMessage(new NMessage(Title, email.getFrom(), Session.get("blogger.postemail"), new Date(), Content));
             } catch (Exception ex) {
                 Logger.getLogger(Community.class.getName()).log(Level.SEVERE, null, ex);
             }
-        }
+        }*/
 
         if (sendToWordpress) {
             //Wordpress
@@ -181,7 +177,7 @@ public class Community extends MemorySelf {
                         System.out.println("Keyword search: " + p);
                         List<Detail> tw = TwitterChannel.getTweets(p);
                         for (Detail d : tw) {
-                            String a = d.getValue(StringIs.class, NMessage.from).getValue();
+                            String a = d.getFrom(); //d.getValue(StringIs.class, NMessage.from).getValue();
                             //addMentions(d);
                             boolean existing = agents.containsKey(a);
                             getAgent(a).add(d);
@@ -265,7 +261,6 @@ public class Community extends MemorySelf {
     public Community() throws Exception {
         super();
         
-        this.email = new EMailChannel();
         
         this.blog = new WordpressChannel();
 
@@ -276,11 +271,8 @@ public class Community extends MemorySelf {
     
     public void start() {
 
-        queue(new Runnable() {
-            @Override public void run() {
-                runAnalyzeUsers();
-            }            
-        });
+        
+        runAnalyzeUsers();
         
         //new SwingWindow(new CommunityBrowser(this), 800, 600, true);
         
@@ -292,9 +284,9 @@ public class Community extends MemorySelf {
         Session.init();
         
         Community c = new Community();
-        c.queue(new HappySad(this, minTweetPeriod, minTweetPeriod * 3 /8));
-        c.queue(new RichPoor(this, minTweetPeriod, minTweetPeriod * 7 /8));
-        //s.queue(new SmartStupid(2 * 60, 2 * 60));
+        new Thread(new HappySad(c, minTweetPeriod, minTweetPeriod * 3 /8)).start();
+        new Thread(new RichPoor(c, minTweetPeriod, minTweetPeriod * 7 /8)).start();
+        //new SmartStupid(2 * 60, 2 * 60);
         c.start();
         
     }

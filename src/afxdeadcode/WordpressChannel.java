@@ -4,7 +4,7 @@
  */
 package afxdeadcode;
 
-import automenta.netention.Session;
+import afxdeadcode.netention.Session;
 import net.bican.wordpress.Page;
 import net.bican.wordpress.Wordpress;
 import redstone.xmlrpc.XmlRpcFault;
